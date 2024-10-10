@@ -7,6 +7,7 @@
 !.gitignore
 
 !/boot/
-!/boot/boot.asm
 !/boot/Makefile
+!/boot/boot.asm
+!/boot/hello.asm
 
