@@ -3,15 +3,18 @@
 
 BOOTSEG		equ 0x7c00
 BIOS_INT	equ 0x10
-SYMBOL		equ 'W'
+SYMBOL		equ '!'
 
-_start:
+print_char:
 	mov ah, 0x0e		; BIOS teletype mode
 	mov al, SYMBOL
 	xor bx, bx
 	int BIOS_INT
 
-	jmp $
+	ret
+
+_start:
+	call print_char
 
 times 510 - ($ - $$) db 0	; fill the rest of the sector with zeros
 
