@@ -1,18 +1,12 @@
 
-FILES = build/kernel.asm.o
+BOOT_BIN = boot.bin
+BUILD_DIR = build
 
-all: bin/boot.bin $(FILES)
-	rm -rf bin/os.bin
-	dd if=bin/boot.bin >> bin/os.bin	
-
-bin/boot.bin: src/boot/boot.asm
-	nasm -f bin src/boot/boot.asm -g -o bin/boot.bin
-
-build/kernel.asm.o: src/kernel.asm
-	nasm -f elf -g src/kernel.asm -o build/kernel.asm.o
+all:
+	@cd src/boot && $(MAKE) --no-print-directory
 
 run:
-	@qemu-system-x86_64 -hda bin/os.bin
+	@qemu-system-x86_64 -hda $(BUILD_DIR)/$(BOOT_BIN)
 
 clean:
-	@rm -rf bin/$(FILE).bin
+	rm -rf $(BUILD_DIR)

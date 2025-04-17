@@ -1,17 +1,18 @@
-SRC = boot_char
+SRC = boot
 ASM = nasm
-FLAGS = -f
-FORMAT = bin
+ASM_FLAGS = -g -f bin
+BOOT_BIN = boot.bin
+BUILD_DIR = ../../build
 
-all: build
+$(BUILD_DIR)/$(BOOT_BIN): $(SRC).asm
+	@mkdir -p $(BUILD_DIR)
+	@$(ASM) $(ASM_FLAGS) $(SRC).asm -o $@
 
-build:
-	$(ASM) $(FLAGS) $(FORMAT) $(SRC).S -o $(SRC).bin
-run:
-	@qemu-system-x86_64 -hda $(SRC).bin
+run: $(BUILD_DIR)/$(BOOT_BIN)
+	@qemu-system-x86_64 -hda $(BUILD_DIR)/$(BOOT_BIN)
 
 debug:
-	gdb -x script.gdb
+	@gdb -x script.gdb
 
 clean:
-	rm -rf *.bin
+	rm -rf $(BUILD_DIR)
