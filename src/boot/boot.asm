@@ -1,68 +1,98 @@
+[BITS 16]
+[ORG 0x7C00]
 
-ORG	0x7c00	; BIOS loads the bootloader into RAM at the absolute address 0x7c00
-BITS	16	; use 16-bit arch
-
-BIOS_INTERRUPT	equ 0x10
-TERMINATED_NULL	equ 0
-MESSAGE		db  'Y', TERMINATED_NULL
-
-CODE_SEG	equ gdt_code - gdt_start
-DATA_SEG	equ gdt_data - gdt_start
+BIOS_INT		equ 0x10
+SYMBOL			equ '!'
+CODE_SEG		equ (gdt_code_seg - gdt_start)
+DATA_SEG		equ (gdt_data_seg - gdt_start)
+REAL_MODE_STACK		equ (0x2000 - 0x10)
 
 _start:
-	jmp short start
-	nop
+	cli
 
-start:
-	jmp 0:step2
-
-step2:
-	cli                 ; clear interrupts
-	mov ax, 0x00
+	xor ax, ax
 	mov ds, ax
 	mov es, ax
 	mov ss, ax
-	mov sp, 0x7C00
-	sti                 ; enable interrupts
 
-.load_protected:
-	cli
-	lgdt[gdt_descriptor]
+	mov sp, $REAL_MODE_STACK
+
+	call print_symb_bios
+
+	jmp real_to_protected
+
+real_to_protected:
+
+	cli				; ?once again
+
+	xor ax, ax
+	mov ds, ax
+
+	lgdt [gdt_desc]
+
+	; turn on protected mode:
 	mov eax, cr0
 	or eax, 0x1
 	mov cr0, eax
-	;jmp CODE_SEG:load32
+
+	jmp CODE_SEG:protected_mode
 
 gdt_start:
-gdt_null:
-	dd 0x0
-	dd 0x0
+	; null descriptor:
+	dw 0, 0
+	db 0, 0, 0, 0
 
-;  offseet 0x8
-gdt_code:               ; cs should point to this
-	dw 0xffff           ; segment  limit first 0-15 bits
-	dw 0                ; base first 0-15 bits
-	db 0                ; base first 16-23 bits
-	db 0x9a             ; access byte
-	db 11001111b        ; high 4 bit flags and the low 4 bit flags
-	db 0                ; base 24-31 bits
+; code segment descriptor:
+gdt_code_seg:
+	dw 0xFFFF			; limit (bits 0-15)
+	dw 0x0				; base (bits 0-15)
+	db 0x0				; base (bits 16-23)
+	db 0x9A				; access byte: present, dpl, type (code, execute/read)
+	db 0xCF				; flags and linmit (bits 16-19)
+	db 0x00				; base (24-31)
 
-; offset 0x10
-gdt_data:			; ds, ss, es, fs, gs
-	dw 0xffff           ; segment limit first 0-15 bits
-	dw 0                ; base first 0-15 bits
-	db 0                ; base first 16-23 bits
-	db 0x92             ; access byte
-	db 11001111b        ; high 4 bit flags and the low 4 bit flags
-	db 0                ; base 24-31 bits
+; data segment descriptor:
+gdt_data_seg:
+	dw 0xFFFF
+	dw 0x0000
+	db 0x00
+	db 0x92
+	db 0xCF
+	db 0x00
 
 gdt_end:
 
-gdt_descriptor:
-	dw gdt_end - gdt_start-1
-	dd gdt_start
+gdt_desc:
+	dw gdt_end - gdt_start - 1	; sizeof(gdt) - 1
+	dd gdt_start			; adress gdt
 
-times 510-($ - $$) db 0 ; fill the rest of the sector with zeros
-dw 0xAA55               ; BIOS looks for a bootloader with the boot signature '0x55AA'
-;db 0x55               ; BIOS looks for a bootloader with the boot signature '0x55AA'
-;db 0xAA
+[BITS 32]
+protected_mode:
+	mov ax, DATA_SEG
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+	mov ss, ax
+	mov ebp, 0x00200000
+	mov esp, ebp
+
+	call print_symb_not_bios
+
+	jmp $
+
+print_symb_bios:
+	mov ah, 0x0E			; BIOS teletype mode
+	mov al, SYMBOL
+	xor bx, bx
+	int BIOS_INT
+	ret
+
+print_symb_not_bios:
+	mov al, 'P'
+	mov ah, 0x04			; specify the color
+	mov [0xB80A0], ax		; specify symbol screen place
+	ret
+
+times 510 - ($ - $$) db 0
+dw 0xAA55
