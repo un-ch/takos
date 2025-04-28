@@ -4,10 +4,7 @@
 # ignore everything
 *
 # except these files:
-!.gitignore
+#!.gitignore
 
-!/boot/
-!/boot/Makefile
-!/boot/boot.asm
-!/boot/hello.asm
-
+!src/
+!Makefile
