@@ -1,66 +1,67 @@
-### GNU Make definitions: ###
-# CURRENT_TARGET	= $@
-# FIRST_PREREQUISITE	= $<
-# ALL_PREREQUISITES 	= $^
+ASM                = nasm
+CROSS_TOOLCHAIN    = /home/us/prj/cross_compiler/bin/i686-elf
+CROSS_GCC          = $(CROSS_TOOLCHAIN)-gcc
+CROSS_LD           = $(CROSS_TOOLCHAIN)-ld
 
-ASM = nasm
-ASM_FLAGS = -g -f bin
-LD_SCRIPT = linker.ld
+ASM_FLAGS         = -g
+ASM_BIN_FLAGS     = $(ASM_FLAGS) -f bin
+ASM_ELF_FLAGS     = $(ASM_FLAGS) -f elf
 
-OS_BIN = takos.bin
-BUILD_DIR = ../build
-BOOT_BIN = $(BUILD_DIR)/boot.bin
-BOOT_SRC = boot/boot.asm
-KERNEL_SRC = src/kernel.asm
-KERNEL_BIN = $(BUILD_DIR)/kernel.bin
+CFLAGS            = -g -ffreestanding -falign-jumps -falign-functions \
+                    -falign-labels -falign-loops -fstrength-reduce \
+                    -fomit-frame-pointer -finline-functions -Wno-unused-function \
+                    -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles \
+                    -nodefaultlibs -Wall -O0 -Iinc
 
-OBJECT_FILES = $(BUILD_DIR)/kernel.asm.o\
-	$(BUILD_DIR)/kernel.o\
-	$(BUILD_DIR)/term.o\
-	$(BUILD_DIR)/string.o\
-	$(BUILD_DIR)/idt.o\
-	$(BUILD_DIR)/idt.asm.o\
-	$(BUILD_DIR)/mem.o
+LDFLAGS          = -g -relocatable
 
-CROSS_TOOLCHAIN_PATH = /home/us/prj/cross_compiler
-CROSS_TARGET = $(CROSS_TOOLCHAIN_PATH)/bin/i686-elf
-CROSS_LINKER = $(CROSS_TARGET)-ld
-CROSS_GCC = $(CROSS_TARGET)-gcc
-CROSS_GCC_FLAGS = -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer
-CROSS_GCC_FLAGS += -finline-functions -Wno-unused-function -fno-builtin
-CROSS_GCC_FLAGS += -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0
-CROSS_GCC_FLAGS += -Iinc
+BUILD_DIR         = ../build
+BOOT_SRC          = boot/boot.asm
+KERNEL_SOURCES    = src/kernel.asm
+LD_SCRIPT         = linker.ld
 
-all: $(BUILD_DIR)/boot.bin $(BUILD_DIR)/kernel.bin
-	dd if=$(BUILD_DIR)/boot.bin		> $(BUILD_DIR)/kernel.img
-	dd if=$(BUILD_DIR)/kernel.bin		>> $(BUILD_DIR)/kernel.img
-	dd if=/dev/zero bs=1048576 count=16	>> $(BUILD_DIR)/kernel.img
+OS_BIN            = takos.bin
+BOOT_BIN          = $(BUILD_DIR)/boot.bin
+KERNEL_BIN        = $(BUILD_DIR)/kernel.bin
+KERNEL_IMG        = $(BUILD_DIR)/kernel.img
+KERNEL_OBJ        = $(BUILD_DIR)/kernelfull.o
 
-$(BUILD_DIR)/kernel.bin: $(OBJECT_FILES)
-	$(CROSS_LINKER) -g -relocatable $(OBJECT_FILES) -o $(BUILD_DIR)/kernelfull.o
-	$(CROSS_GCC) $(CROSS_GCC_FLAGS) -T $(LD_SCRIPT) -ffreestanding -O0 -nostdlib $(BUILD_DIR)/kernelfull.o -o $(BUILD_DIR)/kernel.bin
+OBJECTS = \
+    $(BUILD_DIR)/kernel.asm.o \
+    $(BUILD_DIR)/kernel.o \
+    $(BUILD_DIR)/term.o \
+    $(BUILD_DIR)/string.o \
+    $(BUILD_DIR)/idt.o \
+    $(BUILD_DIR)/idt.asm.o \
+    $(BUILD_DIR)/mem.o
 
-$(BUILD_DIR)/boot.bin: boot/boot.asm
+all: $(BOOT_BIN) $(KERNEL_BIN)
+	dd if=$(BOOT_BIN)             of=$(KERNEL_IMG)
+	dd if=$(KERNEL_BIN)          of=$(KERNEL_IMG) bs=512 seek=1
+	dd if=/dev/zero bs=1048576 count=16 >> $(KERNEL_IMG)
+
+$(BOOT_BIN): $(BOOT_SRC) | $(BUILD_DIR)
+	$(ASM) $(ASM_BIN_FLAGS) $< -o $@
+
+$(KERNEL_BIN): $(OBJECTS)
+	$(CROSS_LD) $(LDFLAGS) $(OBJECTS) -o $(KERNEL_OBJ)
+	$(CROSS_GCC) $(CFLAGS) -T $(LD_SCRIPT) -nostdlib $(KERNEL_OBJ) -o $(KERNEL_BIN)
+
+$(BUILD_DIR)/%.asm.o: %.asm | $(BUILD_DIR)
+	$(ASM) $(ASM_ELF_FLAGS) $< -o $@
+
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	$(CROSS_GCC) $(CFLAGS) -std=gnu99 -c $< -o $@
+
+$(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
-	$(ASM) -f bin $< -o $@
 
-#$(BUILD_DIR)/kernel.asm.o: kernel.asm
-#	$(ASM) -f elf -g $< -o $@
-
-#$(BUILD_DIR)/idt.asm.o: idt.asm
-#	$(ASM) -f elf -g $< -o $@
-
-$(BUILD_DIR)/%.asm.o: %.asm
-	$(ASM) -f elf -g $< -o $@
-
-$(BUILD_DIR)/%.o:	%.c
-	$(CROSS_GCC) $(CROSS_GCC_FLAGS) -std=gnu99 -c $< -o $@
-
-run: $(BOOT_BIN)
-	@qemu-system-x86_64 -hda $(BUILD_DIR)/kernel.img
+run: all
+	@qemu-system-x86_64 -hda $(KERNEL_IMG)
 
 debug:
 	@gdb -x script.gdb
 
 clean:
 	rm -rf $(BUILD_DIR)
+
